@@ -370,8 +370,9 @@
 
     <footer>
       <div>Made with <i class="fa-solid fa-heart" style="color:#ef4444"></i> for a better weekend. 数据保存在浏览器本地。</div>
-    </footer>
+  </footer>
 
+    <script src="https://imgcache.qq.com/qcloud/cloudbase-js-sdk/1.7.2/cloudbase.full.js"></script>
     <script>
       // Data structures in localStorage
       // plans: { id, title, type, location, priority, notes }
@@ -537,6 +538,7 @@
             writeLS('schedule', schedule);
             renderGrid();
             renderTimelineTable();
+            saveToCloud && saveToCloud().catch(() => {});
           });
         });
       }
@@ -550,6 +552,7 @@
             for (const key of Object.keys(schedule)) schedule[key] = schedule[key].filter(pid => pid !== id);
             writeLS('plans', plans); writeLS('schedule', schedule);
             renderGrid(); renderTimelineTable();
+            saveToCloud && saveToCloud().catch(() => {});
           }));
           card.querySelectorAll('[data-action="unassign"]').forEach(btn => btn.addEventListener('click', () => {
             const inSlot = card.getAttribute('data-in-slot');
@@ -557,6 +560,7 @@
               schedule[inSlot] = schedule[inSlot].filter(pid => pid !== id);
               writeLS('schedule', schedule);
               renderGrid(); renderTimelineTable();
+              saveToCloud && saveToCloud().catch(() => {});
             }
           }));
         });
@@ -571,6 +575,7 @@
         for (const k of Object.keys(schedule)) schedule[k] = [];
         writeLS('schedule', schedule);
         renderGrid(); renderTimelineTable();
+        saveToCloud && saveToCloud().catch(() => {});
       });
 
       // Form submit
@@ -593,6 +598,7 @@
         writeLS('schedule', schedule);
         form.reset();
         renderGrid(); renderTimelineTable();
+        saveToCloud && saveToCloud().catch(() => {});
       });
 
       // 根据类型切换可选时间段
@@ -626,9 +632,59 @@
         writeLS('plans', plans);
       }
 
-      // Initial render
-      renderGrid();
-      renderTimelineTable();
+      // CloudBase init and sync
+      const CLOUD_ENV_ID = 'cloud1-6gbv0ehtde10ce4f';
+      const CLOUD_DOC_ID = 'public';
+      let cloudApp, cloudDb;
+
+      async function initCloudbase() {
+        try {
+          cloudApp = cloudbase.init({ env: CLOUD_ENV_ID });
+          await cloudApp.auth({ persistence: 'local' }).anonymousAuthProvider().signIn();
+          cloudDb = cloudApp.database();
+        } catch (e) {
+          console.warn('CloudBase init failed:', e);
+        }
+      }
+
+      async function loadFromCloud() {
+        if (!cloudDb) return;
+        try {
+          const res = await cloudDb.collection('weekend_plans').doc(CLOUD_DOC_ID).get();
+          const data = res && res.data && res.data[0];
+          if (data) {
+            plans = Array.isArray(data.plans) ? data.plans : plans;
+            schedule = typeof data.schedule === 'object' && data.schedule ? { ...schedule, ...data.schedule } : schedule;
+            for (const { id } of SLOT_DEFS) if (!schedule[id]) schedule[id] = [];
+            writeLS('plans', plans); writeLS('schedule', schedule);
+          }
+        } catch (e) {}
+      }
+
+      let saveTimer = null;
+      async function saveToCloud() {
+        if (!cloudDb) return;
+        if (saveTimer) clearTimeout(saveTimer);
+        return new Promise((resolve) => {
+          saveTimer = setTimeout(async () => {
+            try {
+              await cloudDb.collection('weekend_plans').doc(CLOUD_DOC_ID).set({ _id: CLOUD_DOC_ID, plans, schedule, updatedAt: Date.now() });
+            } catch (e) {
+              try {
+                await cloudDb.collection('weekend_plans').doc(CLOUD_DOC_ID).update({ plans, schedule, updatedAt: Date.now() });
+              } catch {}
+            }
+            resolve();
+          }, 200);
+        });
+      }
+
+      (async function bootstrap() {
+        await initCloudbase();
+        await loadFromCloud();
+        renderGrid();
+        renderTimelineTable();
+      })();
     </script>
   </body>
 </html>
