@@ -256,15 +256,6 @@
           <span>周末行动计划</span>
         </div>
         <div class="spacer"></div>
-        <button id="exportBtn" class="pill" title="导出/备份">
-          <i class="fa-solid fa-file-export"></i>
-          <span>导出</span>
-        </button>
-        <label for="importInput" class="pill" title="导入/还原" style="cursor: pointer;">
-          <i class="fa-solid fa-file-import"></i>
-          <span>导入</span>
-        </label>
-        <input id="importInput" type="file" accept="application/json" style="display:none" />
       </nav>
       <div class="hero">
         <h1>规划你的理想周末</h1>
@@ -364,14 +355,14 @@
                 </div>
               </div>
               <div class="panel-body">
-                <div class="subpanel" style="margin-bottom:12px;">
-                  <h3>时间轴（概览）</h3>
+                <div class="grid" id="scheduleGrid">
+                  <!-- Slots injected by JS -->
+                </div>
+                <div class="subpanel" style="margin-top:12px;">
+                  <h3>整体时间轴</h3>
                   <div id="timeline" class="subpanel-body" style="padding:10px;">
                     <div class="timeline" aria-label="周末时间轴"></div>
                   </div>
-                </div>
-                <div class="grid" id="scheduleGrid">
-                  <!-- Slots injected by JS -->
                 </div>
               </div>
             </div>
@@ -398,6 +389,12 @@
         { id: 'sun_pm', label: '周日下午', icon: 'sun' },
         { id: 'sun_nt', label: '周日晚上', icon: 'moon' },
         { id: 'any', label: '随意/暂定', icon: 'any' },
+        // 餐厅专用时间段
+        { id: 'fri_dinner', label: '周五晚饭', icon: 'meal' },
+        { id: 'sat_lunch', label: '周六中饭', icon: 'meal' },
+        { id: 'sat_dinner', label: '周六晚饭', icon: 'meal' },
+        { id: 'sun_lunch', label: '周日中饭', icon: 'meal' },
+        { id: 'sun_dinner', label: '周日晚饭', icon: 'meal' },
       ];
 
       const el = (sel) => document.querySelector(sel);
@@ -475,7 +472,7 @@
           const content = items.length
             ? items.map(p => planCardTemplate(p, def.id)).join('')
             : `<div class="empty">拖拽计划到此处</div>`;
-          const ico = def.icon === 'sun' ? '<i class="fa-regular fa-sun"></i>' : def.icon === 'moon' ? '<i class="fa-regular fa-moon"></i>' : '<i class="fa-solid fa-wand-magic-sparkles"></i>';
+          const ico = def.icon === 'sun' ? '<i class="fa-regular fa-sun"></i>' : def.icon === 'moon' ? '<i class="fa-regular fa-moon"></i>' : def.icon === 'meal' ? '<i class="fa-solid fa-utensils"></i>' : '<i class="fa-solid fa-wand-magic-sparkles"></i>';
           return `
             <div class="slot" data-slot="${def.id}" aria-label="${def.label}">
               <div class="slot-header"><span>${ico} ${def.label}</span><span class="slot-count">${items.length}</span></div>
@@ -497,7 +494,7 @@
             .filter(Boolean)
             .map(p => p.title);
           const text = titles.length ? titles.join('、') : '— 暂无安排 —';
-          const ico = def.icon === 'sun' ? '<i class="fa-regular fa-sun"></i>' : '<i class="fa-regular fa-moon"></i>';
+          const ico = def.icon === 'sun' ? '<i class="fa-regular fa-sun"></i>' : def.icon === 'moon' ? '<i class="fa-regular fa-moon"></i>' : def.icon === 'meal' ? '<i class="fa-solid fa-utensils"></i>' : '<i class="fa-solid fa-wand-magic-sparkles"></i>';
           return `
             <div class="timeline-item">
               <div class="timeline-head">${ico} ${def.label}</div>
@@ -596,35 +593,26 @@
         renderBacklog(); renderGrid(); renderTimeline();
       });
 
-      // Export & Import
-      el('#exportBtn').addEventListener('click', () => {
-        const data = { plans, schedule, exportedAt: new Date().toISOString() };
-        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = 'weekend_plans.json';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
+      // 根据类型切换可选时间段
+      const DEFAULT_SLOT_IDS = ['fri_pm','sat_am','sat_pm','sat_nt','sun_am','sun_pm','sun_nt','any'];
+      const RESTAURANT_SLOT_IDS = ['fri_dinner','sat_lunch','sat_dinner','sun_lunch','sun_dinner','any'];
+      function refreshSlotOptionsByType(type) {
+        const select = el('#slots');
+        const list = type === 'restaurant' ? RESTAURANT_SLOT_IDS : DEFAULT_SLOT_IDS;
+        const options = list.map(id => {
+          const def = SLOT_DEFS.find(d => d.id === id);
+          return def ? `<option value="${def.id}">${def.label}</option>` : '';
+        }).join('');
+        select.innerHTML = options;
+        select.size = Math.min(list.length + 0, 7);
+      }
+      el('#type').addEventListener('change', (e) => {
+        refreshSlotOptionsByType(e.target.value);
       });
-      el('#importInput').addEventListener('change', async (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const text = await file.text();
-        try {
-          const data = JSON.parse(text);
-          if (!Array.isArray(data.plans) || typeof data.schedule !== 'object') throw new Error('Invalid');
-          plans = data.plans;
-          schedule = { ...schedule, ...data.schedule };
-          writeLS('plans', plans); writeLS('schedule', schedule);
-          renderBacklog(); renderGrid(); renderTimeline();
-          alert('导入成功');
-        } catch {
-          alert('导入失败：文件格式不正确');
-        } finally {
-          e.target.value = '';
-        }
-      });
+      // 初始根据默认类型填充
+      refreshSlotOptionsByType(el('#type').value);
+
+      // 已移除导入/导出功能
 
       // Seed demo if empty
       if (plans.length === 0) {
