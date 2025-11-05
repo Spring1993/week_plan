@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>周末行动计划 | Weekend Planner</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Nunito:wght@500;700&display=swap" rel="stylesheet" />
+
+    <!-- Font Awesome Icons -->
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"
+      integrity="sha512-DTOQO9RWCH3ppGqcWaEA1BIZOC6xxalwEsw9c2QQeAIftl+Vegovlnee1c9QX4TctnWMn13TZye+giMm8e2LwA=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="description" content="一个简单优雅的周末行动计划网站：录入计划、查看时间段、拖拽关联安排。" />
+
+    <style>
+      :root {
+        --bg: #0b1220;           /* deep slate */
+        --panel: #0f172a;        /* slate-900 */
+        --panel-2: #111827;      /* slate-800 */
+        --text: #e5e7eb;         /* gray-200 */
+        --muted: #9aa4b2;        /* slate-400 */
+        --brand: #22d3ee;        /* cyan-400 */
+        --brand-2: #06b6d4;      /* cyan-500 */
+        --accent: #a78bfa;       /* violet-400 */
+        --success: #34d399;      /* green-400 */
+        --warning: #fbbf24;      /* amber-400 */
+        --danger: #f87171;       /* red-400 */
+        --card: #0b132a;         /* slightly darker */
+        --border: #1f2937;       /* slate-700 */
+        --shadow: 0 10px 25px rgba(0,0,0,0.35), 0 2px 8px rgba(0,0,0,0.25);
+        --radius: 14px;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { height: 100%; }
+      body {
+        margin: 0;
+        background: radial-gradient(1200px 700px at 70% -10%, rgba(34,211,238,0.10), transparent 60%),
+                    radial-gradient(1000px 600px at 10% -10%, rgba(167,139,250,0.10), transparent 60%),
+                    var(--bg);
+        color: var(--text);
+        font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        line-height: 1.55;
+      }
+
+      header {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: linear-gradient(180deg, rgba(11,18,32,0.9), rgba(11,18,32,0.7) 60%, transparent);
+        backdrop-filter: blur(10px);
+      }
+      .nav {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 18px 20px 8px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+      .logo {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 800;
+        letter-spacing: 0.3px;
+        font-size: 18px;
+      }
+      .logo i { color: var(--brand); }
+      .spacer { flex: 1; }
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: linear-gradient(180deg, var(--panel), var(--panel-2));
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 10px 14px;
+        border-radius: 999px;
+        box-shadow: var(--shadow);
+        cursor: pointer;
+        transition: transform .15s ease, border-color .15s ease;
+      }
+      .pill:hover { transform: translateY(-1px); border-color: #2b3a52; }
+
+      .hero {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 12px 20px 24px;
+      }
+      .hero h1 {
+        font-size: clamp(26px, 4vw, 38px);
+        margin: 10px 0 6px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+      }
+      .hero p { color: var(--muted); margin: 0; }
+
+      main { max-width: 1200px; margin: 8px auto 48px; padding: 0 20px; }
+
+      .layout {
+        display: grid;
+        grid-template-columns: 340px 1fr;
+        gap: 18px;
+      }
+
+      @media (max-width: 960px) {
+        .layout { grid-template-columns: 1fr; }
+      }
+
+      .panel {
+        background: linear-gradient(180deg, var(--panel), var(--panel-2));
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+      .panel-header {
+        padding: 14px 16px 6px;
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .panel-header h2 {
+        margin: 0;
+        font-size: 16px;
+        letter-spacing: 0.3px;
+      }
+      .panel-body { padding: 14px; }
+
+      /* Form */
+      .form-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 12px;
+      }
+      .form-row { display: flex; flex-direction: column; gap: 6px; }
+      label { font-size: 12px; color: var(--muted); }
+      input[type="text"], textarea, select {
+        background: #0c1326;
+        color: var(--text);
+        border: 1px solid var(--border);
+        padding: 10px 12px;
+        border-radius: 10px;
+        outline: none;
+        transition: border-color .15s ease, box-shadow .15s ease;
+      }
+      textarea { resize: vertical; min-height: 76px; }
+      input:focus, textarea:focus, select:focus {
+        border-color: #2b3a52;
+        box-shadow: 0 0 0 4px rgba(34,211,238,0.12);
+      }
+      .actions { display: flex; gap: 10px; margin-top: 6px; }
+      button {
+        background: linear-gradient(180deg, var(--brand), var(--brand-2));
+        color: #001018;
+        border: none;
+        padding: 10px 14px;
+        border-radius: 10px;
+        font-weight: 700;
+        cursor: pointer;
+        transition: transform .15s ease, filter .15s ease;
+      }
+      button:hover { transform: translateY(-1px); filter: brightness(1.05); }
+      .ghost-btn {
+        background: transparent;
+        color: var(--text);
+        border: 1px solid var(--border);
+      }
+
+      /* Backlog & Grid */
+      .columns { display: grid; grid-template-columns: 1fr 1.2fr; gap: 18px; }
+      @media (max-width: 960px) { .columns { grid-template-columns: 1fr; } }
+
+      .subpanel { background: #0c1326; border: 1px solid var(--border); border-radius: 12px; }
+      .subpanel h3 { margin: 0; font-size: 14px; padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--muted); }
+      .subpanel-body { padding: 10px; display: grid; gap: 10px; }
+
+      .plan-card {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 10px;
+        align-items: center;
+        background: linear-gradient(180deg, #0a1328, #0a1324);
+        border: 1px solid #1a2740;
+        border-radius: 12px;
+        padding: 10px 12px;
+        cursor: grab;
+        user-select: none;
+      }
+      .plan-card:active { cursor: grabbing; }
+      .plan-type {
+        width: 28px; height: 28px; display: grid; place-items: center;
+        border-radius: 8px; background: #0e1b36; border: 1px solid #1f3056; color: #8ab5ff;
+      }
+      .plan-title { font-weight: 700; letter-spacing: 0.2px; }
+      .plan-meta { font-size: 12px; color: var(--muted); }
+      .plan-actions { display: flex; gap: 8px; align-items: center; }
+      .icon-btn { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 6px 8px; border-radius: 8px; }
+
+      .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+      @media (max-width: 1200px) { .grid { grid-template-columns: repeat(2, 1fr); } }
+      @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+      .slot {
+        min-height: 140px;
+        background: linear-gradient(180deg, #0a1223, #0a1220);
+        border: 1px dashed #20304a;
+        border-radius: 12px;
+        padding: 10px;
+        transition: border-color .15s ease, background .15s ease, transform .15s ease;
+      }
+      .slot.drag-over { border-color: var(--brand); background: rgba(34,211,238,0.08); transform: translateY(-2px); }
+      .slot-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; color: var(--muted); font-size: 13px; }
+      .slot-count { color: var(--brand); font-weight: 700; }
+
+      .empty {
+        border: 1px dashed #2a3a55;
+        color: var(--muted);
+        border-radius: 10px;
+        padding: 12px;
+        text-align: center;
+      }
+
+      .filters { display: flex; gap: 8px; flex-wrap: wrap; }
+      .tag { background: #0b1326; border: 1px solid var(--border); color: var(--text); padding: 6px 10px; border-radius: 999px; font-size: 12px; cursor: pointer; }
+      .tag.active { border-color: var(--brand); color: var(--brand); }
+
+      footer { color: var(--muted); text-align: center; padding: 36px 20px; }
+
+      /* Timeline */
+      .timeline { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 4px; }
+      .timeline::-webkit-scrollbar { height: 8px; }
+      .timeline::-webkit-scrollbar-thumb { background: #1f2b44; border-radius: 999px; }
+      .timeline-item { min-width: 220px; background: #0b1326; border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; }
+      .timeline-head { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; margin-bottom: 4px; }
+      .timeline-body { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+      
+    </style>
+  </head>
+  <body>
+    <header>
+      <nav class="nav" aria-label="主导航">
+        <div class="logo" aria-label="网站Logo">
+          <i class="fa-solid fa-calendar-week"></i>
+          <span>周末行动计划</span>
+        </div>
+        <div class="spacer"></div>
+        <button id="exportBtn" class="pill" title="导出/备份">
+          <i class="fa-solid fa-file-export"></i>
+          <span>导出</span>
+        </button>
+        <label for="importInput" class="pill" title="导入/还原" style="cursor: pointer;">
+          <i class="fa-solid fa-file-import"></i>
+          <span>导入</span>
+        </label>
+        <input id="importInput" type="file" accept="application/json" style="display:none" />
+      </nav>
+      <div class="hero">
+        <h1>规划你的理想周末</h1>
+        <p>录入计划、拖拽分配时间段，轻松安排周五晚到周日晚的行程。</p>
+        
+      </div>
+    </header>
+
+    <main>
+      <section class="layout" aria-label="页面布局">
+        <!-- Left: Create Plan -->
+        <aside class="panel" aria-label="创建计划">
+          <div class="panel-header">
+            <h2><i class="fa-solid fa-plus"></i> 新建行动计划</h2>
+          </div>
+          <div class="panel-body">
+            <form id="planForm" aria-label="计划表单">
+              <div class="form-grid">
+                <div class="form-row">
+                  <label for="title">计划标题</label>
+                  <input id="title" name="title" type="text" placeholder="例如：去圆明园、尝试新餐厅、完成作业…" required />
+                </div>
+                <div class="form-row">
+                  <label for="type">类型</label>
+                  <select id="type" name="type">
+                    <option value="place">地点</option>
+                    <option value="restaurant">餐厅</option>
+                    <option value="task">必须完成</option>
+                    <option value="event">事件</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <label for="location">地点/链接（可选）</label>
+                  <input id="location" name="location" type="text" placeholder="可粘贴地图或网址" />
+                </div>
+                <div class="form-row">
+                  <label for="priority">优先级</label>
+                  <select id="priority" name="priority">
+                    <option value="normal">普通</option>
+                    <option value="high">重要</option>
+                    <option value="urgent">紧急</option>
+                  </select>
+                </div>
+              </div>
+              <div class="form-row" style="margin-top: 8px;">
+                <label for="notes">备注（可选）</label>
+                <textarea id="notes" name="notes" placeholder="添加细节、同行人、预算等"></textarea>
+              </div>
+              <div class="form-row" style="margin-top: 8px;">
+                <label for="slots">预分配时间段（可多选）</label>
+                <select id="slots" name="slots" multiple size="6" aria-label="选择时间段">
+                  <option value="fri_pm">周五晚上</option>
+                  <option value="sat_am">周六上午</option>
+                  <option value="sat_pm">周六下午</option>
+                  <option value="sat_nt">周六晚上</option>
+                  <option value="sun_am">周日上午</option>
+                  <option value="sun_pm">周日下午</option>
+                  <option value="sun_nt">周日晚上</option>
+                  <option value="any">随意/暂定</option>
+                </select>
+              </div>
+              <div class="actions">
+                <button type="submit"><i class="fa-solid fa-paper-plane"></i> 添加计划</button>
+                <button type="reset" class="ghost-btn"><i class="fa-solid fa-eraser"></i> 清空</button>
+              </div>
+            </form>
+          </div>
+        </aside>
+
+        <!-- Right: Backlog and Schedule -->
+        <section aria-label="计划清单与周末时间表">
+          <div class="columns">
+            <div class="panel" aria-label="计划清单">
+              <div class="panel-header">
+                <h2><i class="fa-solid fa-list"></i> 待分配计划</h2>
+                <div class="filters">
+                  <button class="tag active" data-filter="all">全部</button>
+                  <button class="tag" data-filter="place">地点</button>
+                  <button class="tag" data-filter="restaurant">餐厅</button>
+                  <button class="tag" data-filter="task">必须完成</button>
+                  <button class="tag" data-filter="event">事件</button>
+                </div>
+              </div>
+              <div class="panel-body">
+                <div class="subpanel">
+                  <h3>计划列表（拖拽到右侧时间段）</h3>
+                  <div id="backlog" class="subpanel-body" aria-live="polite"></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="panel" aria-label="周末时间计划表">
+              <div class="panel-header">
+                <h2><i class="fa-solid fa-calendar"></i> 周末时间列表</h2>
+                <div class="filters">
+                  <button id="clearAll" class="tag" title="清空所有安排"><i class="fa-solid fa-trash"></i> 清空安排</button>
+                </div>
+              </div>
+              <div class="panel-body">
+                <div class="subpanel" style="margin-bottom:12px;">
+                  <h3>时间轴（概览）</h3>
+                  <div id="timeline" class="subpanel-body" style="padding:10px;">
+                    <div class="timeline" aria-label="周末时间轴"></div>
+                  </div>
+                </div>
+                <div class="grid" id="scheduleGrid">
+                  <!-- Slots injected by JS -->
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer>
+      <div>Made with <i class="fa-solid fa-heart" style="color:#ef4444"></i> for a better weekend. 数据保存在浏览器本地。</div>
+    </footer>
+
+    <script>
+      // Data structures in localStorage
+      // plans: { id, title, type, location, priority, notes }
+      // schedule: { slotId: string: string[] (planIds) }
+
+      const SLOT_DEFS = [
+        { id: 'fri_pm', label: '周五晚上', icon: 'moon' },
+        { id: 'sat_am', label: '周六上午', icon: 'sun' },
+        { id: 'sat_pm', label: '周六下午', icon: 'sun' },
+        { id: 'sat_nt', label: '周六晚上', icon: 'moon' },
+        { id: 'sun_am', label: '周日上午', icon: 'sun' },
+        { id: 'sun_pm', label: '周日下午', icon: 'sun' },
+        { id: 'sun_nt', label: '周日晚上', icon: 'moon' },
+        { id: 'any', label: '随意/暂定', icon: 'any' },
+      ];
+
+      const el = (sel) => document.querySelector(sel);
+      const els = (sel) => Array.from(document.querySelectorAll(sel));
+
+      function readLS(key, fallback) {
+        try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; }
+      }
+      function writeLS(key, value) { localStorage.setItem(key, JSON.stringify(value)); }
+
+      let plans = readLS('plans', []);
+      let schedule = readLS('schedule', {});
+      for (const { id } of SLOT_DEFS) if (!schedule[id]) schedule[id] = [];
+
+      function uid() { return 'p_' + Math.random().toString(36).slice(2, 10); }
+
+      function typeIcon(type) {
+        if (type === 'place') return '<i class="fa-solid fa-location-dot"></i>';
+        if (type === 'restaurant') return '<i class="fa-solid fa-utensils"></i>';
+        if (type === 'event') return '<i class="fa-solid fa-bolt"></i>';
+        return '<i class="fa-solid fa-check"></i>';
+      }
+      function priorityBadge(priority) {
+        if (priority === 'urgent') return '<span style="color: var(--danger); font-weight:700;">紧急</span>';
+        if (priority === 'high') return '<span style="color: var(--warning); font-weight:700;">重要</span>';
+        return '<span style="color: var(--muted);">普通</span>';
+      }
+
+      function planCardTemplate(plan, inSlotId) {
+        const location = plan.location?.trim();
+        const meta = [
+          priorityBadge(plan.priority),
+          plan.type === 'restaurant' ? '餐厅' : plan.type === 'place' ? '地点' : plan.type === 'event' ? '事件' : '必须完成'
+        ]
+          .join(' · ');
+        return `
+          <div class="plan-card" draggable="true" data-id="${plan.id}" ${inSlotId ? `data-in-slot="${inSlotId}"` : ''}>
+            <div class="plan-type">${typeIcon(plan.type)}</div>
+            <div>
+              <div class="plan-title">${escapeHtml(plan.title)}</div>
+              <div class="plan-meta">${meta}${location ? ` · <a href="${escapeAttr(location)}" target="_blank" rel="noopener" style="color:#7dd3fc;">链接</a>` : ''}</div>
+            </div>
+            <div class="plan-actions">
+              ${inSlotId ? `<button class="icon-btn" data-action="unassign" title="移出该时间段"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>` : ''}
+              <button class="icon-btn" data-action="delete" title="删除"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
+        `;
+      }
+
+      function escapeHtml(s) {
+        return String(s).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+      }
+      function escapeAttr(s) {
+        return String(s).replaceAll('"', '&quot;');
+      }
+
+      function renderBacklog(filter = currentFilter) {
+        const backlogEl = el('#backlog');
+        const assignedIds = new Set(Object.values(schedule).flat());
+        const items = plans.filter(p => !assignedIds.has(p.id) && (filter === 'all' || p.type === filter));
+        if (!items.length) {
+          backlogEl.innerHTML = `<div class="empty">暂无待分配计划。试试添加一个，或从右侧时间段拖回这里。</div>`;
+          return;
+        }
+        backlogEl.innerHTML = items.map(p => planCardTemplate(p, null)).join('');
+        attachDrag(backlogEl);
+        attachCardActions(backlogEl);
+      }
+
+      function renderGrid() {
+        const grid = el('#scheduleGrid');
+        grid.innerHTML = SLOT_DEFS.map(def => {
+          const items = schedule[def.id].map(pid => plans.find(p => p.id === pid)).filter(Boolean);
+          const content = items.length
+            ? items.map(p => planCardTemplate(p, def.id)).join('')
+            : `<div class="empty">拖拽计划到此处</div>`;
+          const ico = def.icon === 'sun' ? '<i class="fa-regular fa-sun"></i>' : def.icon === 'moon' ? '<i class="fa-regular fa-moon"></i>' : '<i class="fa-solid fa-wand-magic-sparkles"></i>';
+          return `
+            <div class="slot" data-slot="${def.id}" aria-label="${def.label}">
+              <div class="slot-header"><span>${ico} ${def.label}</span><span class="slot-count">${items.length}</span></div>
+              <div class="slot-body">${content}</div>
+            </div>
+          `;
+        }).join('');
+        attachDropZones();
+        els('.slot-body').forEach(container => attachCardActions(container));
+      }
+
+      function renderTimeline() {
+        const bar = document.querySelector('.timeline');
+        if (!bar) return;
+        const primarySlots = SLOT_DEFS.filter(s => s.id !== 'any');
+        bar.innerHTML = primarySlots.map(def => {
+          const titles = schedule[def.id]
+            .map(pid => plans.find(p => p.id === pid))
+            .filter(Boolean)
+            .map(p => p.title);
+          const text = titles.length ? titles.join('、') : '— 暂无安排 —';
+          const ico = def.icon === 'sun' ? '<i class="fa-regular fa-sun"></i>' : '<i class="fa-regular fa-moon"></i>';
+          return `
+            <div class="timeline-item">
+              <div class="timeline-head">${ico} ${def.label}</div>
+              <div class="timeline-body" title="${text}">${text}</div>
+            </div>
+          `;
+        }).join('');
+      }
+
+      function attachDrag(container) {
+        container.querySelectorAll('.plan-card').forEach(card => {
+          card.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', card.getAttribute('data-id'));
+            e.dataTransfer.effectAllowed = 'move';
+          });
+        });
+      }
+
+      function attachDropZones() {
+        els('.slot').forEach(slot => {
+          slot.addEventListener('dragover', (e) => { e.preventDefault(); slot.classList.add('drag-over'); });
+          slot.addEventListener('dragleave', () => slot.classList.remove('drag-over'));
+          slot.addEventListener('drop', (e) => {
+            e.preventDefault();
+            slot.classList.remove('drag-over');
+            const id = e.dataTransfer.getData('text/plain');
+            if (!id) return;
+            const slotId = slot.getAttribute('data-slot');
+            // prevent duplicates in same slot
+            if (!schedule[slotId].includes(id)) schedule[slotId].push(id);
+            writeLS('schedule', schedule);
+            renderBacklog();
+            renderGrid();
+          });
+        });
+      }
+
+      function attachCardActions(container) {
+        container.querySelectorAll('.plan-card').forEach(card => {
+          const id = card.getAttribute('data-id');
+          card.querySelectorAll('[data-action="delete"]').forEach(btn => btn.addEventListener('click', () => {
+            // remove from plans and schedule
+            plans = plans.filter(p => p.id !== id);
+            for (const key of Object.keys(schedule)) schedule[key] = schedule[key].filter(pid => pid !== id);
+            writeLS('plans', plans); writeLS('schedule', schedule);
+            renderBacklog(); renderGrid();
+          }));
+          card.querySelectorAll('[data-action="unassign"]').forEach(btn => btn.addEventListener('click', () => {
+            const inSlot = card.getAttribute('data-in-slot');
+            if (inSlot && schedule[inSlot]) {
+              schedule[inSlot] = schedule[inSlot].filter(pid => pid !== id);
+              writeLS('schedule', schedule);
+              renderBacklog(); renderGrid();
+            }
+          }));
+        });
+        attachDrag(container);
+      }
+
+      // Filters
+      let currentFilter = 'all';
+      els('.filters .tag[data-filter]').forEach(btn => btn.addEventListener('click', () => {
+        els('.filters .tag[data-filter]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentFilter = btn.getAttribute('data-filter');
+        renderBacklog();
+      }));
+
+      // Clear all schedule
+      el('#clearAll').addEventListener('click', () => {
+        if (!confirm('确定清空所有已分配的安排吗？')) return;
+        for (const k of Object.keys(schedule)) schedule[k] = [];
+        writeLS('schedule', schedule);
+        renderBacklog(); renderGrid(); renderTimeline();
+      });
+
+      // Form submit
+      el('#planForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const form = e.currentTarget;
+        const plan = {
+          id: uid(),
+          title: form.title.value.trim(),
+          type: form.type.value,
+          location: form.location.value.trim(),
+          priority: form.priority.value,
+          notes: form.notes.value.trim(),
+        };
+        if (!plan.title) return alert('请输入计划标题');
+        plans.unshift(plan);
+        writeLS('plans', plans);
+        const selected = Array.from(form.slots.selectedOptions).map(o => o.value);
+        selected.forEach(slotId => { if (!schedule[slotId].includes(plan.id)) schedule[slotId].push(plan.id); });
+        writeLS('schedule', schedule);
+        form.reset();
+        renderBacklog(); renderGrid(); renderTimeline();
+      });
+
+      // Export & Import
+      el('#exportBtn').addEventListener('click', () => {
+        const data = { plans, schedule, exportedAt: new Date().toISOString() };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'weekend_plans.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      });
+      el('#importInput').addEventListener('change', async (e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const text = await file.text();
+        try {
+          const data = JSON.parse(text);
+          if (!Array.isArray(data.plans) || typeof data.schedule !== 'object') throw new Error('Invalid');
+          plans = data.plans;
+          schedule = { ...schedule, ...data.schedule };
+          writeLS('plans', plans); writeLS('schedule', schedule);
+          renderBacklog(); renderGrid(); renderTimeline();
+          alert('导入成功');
+        } catch {
+          alert('导入失败：文件格式不正确');
+        } finally {
+          e.target.value = '';
+        }
+      });
+
+      // Seed demo if empty
+      if (plans.length === 0) {
+        plans = [
+          { id: uid(), title: '去公园骑行', type: 'place', location: '', priority: 'normal', notes: '' },
+          { id: uid(), title: '尝试新开的意面餐厅', type: 'restaurant', location: '', priority: 'high', notes: '' },
+          { id: uid(), title: '完成英语作业', type: 'task', location: '', priority: 'urgent', notes: '' },
+        ];
+        writeLS('plans', plans);
+      }
+
+      // Initial render
+      renderBacklog();
+      renderGrid();
+      renderTimeline();
+    </script>
+  </body>
+</html>
+
+
