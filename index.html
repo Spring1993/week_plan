@@ -457,24 +457,53 @@
           const items = schedule[def.id].map(pid => plans.find(p => p.id === pid)).filter(Boolean);
           const content = items.length
             ? items.map(p => planCardTemplate(p, def.id)).join('')
-            : `<div class="empty">拖拽计划到此处</div>`;
+            : `<div class="empty">暂无安排</div>`;
           const ico = def.icon === 'sun' ? '<i class="fa-regular fa-sun"></i>' : def.icon === 'moon' ? '<i class="fa-regular fa-moon"></i>' : def.icon === 'meal' ? '<i class="fa-solid fa-utensils"></i>' : '<i class="fa-solid fa-wand-magic-sparkles"></i>';
           return `
             <div class="slot" data-slot="${def.id}" aria-label="${def.label}">
-              <div class="slot-header"><span>${ico} ${def.label}</span><span class="slot-count">${items.length}</span></div>
+              <div class="slot-header">
+                <span>${ico} ${def.label}</span>
+                <span style="display:flex; align-items:center; gap:8px;">
+                  <span class="slot-count">${items.length}</span>
+                  <button class="tag" data-action="slot-clear" data-slot="${def.id}" title="清空该时间段安排"><i class="fa-solid fa-broom"></i> 清空</button>
+                </span>
+              </div>
               <div class="slot-body">${content}</div>
             </div>
           `;
         }).join('');
         attachDropZones();
         els('.slot-body').forEach(container => attachCardActions(container));
+        attachSlotHeaderActions();
       }
+
+      function attachSlotHeaderActions() {
+        els('[data-action="slot-clear"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const slotId = btn.getAttribute('data-slot');
+            if (!slotId) return;
+            if (!confirm('确定清空该时间段的所有安排吗？')) return;
+            schedule[slotId] = [];
+            writeLS('schedule', schedule);
+            renderGrid();
+            renderTimelineTable();
+          });
+        });
+      }
+
+      const TIMELINE_ORDER = [
+        'fri_dinner','fri_pm',
+        'sat_am','sat_lunch','sat_pm','sat_dinner','sat_nt',
+        'sun_am','sun_lunch','sun_pm','sun_dinner','sun_nt'
+      ];
 
       function renderTimelineTable() {
         const tbody = document.getElementById('timelineTableBody');
         if (!tbody) return;
-        const primarySlots = SLOT_DEFS.filter(s => s.id !== 'any');
-        tbody.innerHTML = primarySlots.map(def => {
+        const ordered = TIMELINE_ORDER
+          .map(id => SLOT_DEFS.find(d => d.id === id))
+          .filter(Boolean);
+        tbody.innerHTML = ordered.map(def => {
           const titles = schedule[def.id]
             .map(pid => plans.find(p => p.id === pid))
             .filter(Boolean)
