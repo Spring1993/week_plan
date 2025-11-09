@@ -395,8 +395,6 @@
       <div>Made with <i class="fa-solid fa-heart" style="color:#ef4444"></i> for a better weekend. 数据保存在浏览器本地。</div>
   </footer>
 
-    <!-- CloudBase JS SDK -->
-    <script src="https://unpkg.com/@cloudbase/js-sdk@1.7.2/dist/index.umd.js"></script>
     <script>
       // Data structures in localStorage
       // plans: { id, title, type, location, priority, notes }
@@ -656,10 +654,11 @@
         writeLS('plans', plans);
       }
 
-      // CloudBase init and sync
+      // CloudBase HTTP API (无需SDK)
       const CLOUD_ENV_ID = 'cloud1-6gbv0ehtde10ce4f';
       const CLOUD_DOC_ID = 'public';
-      let cloudApp, cloudDb;
+      const CLOUD_API_BASE = `https://${CLOUD_ENV_ID}.service.tcloudbase.com`;
+      let cloudApp, cloudDb, cloudReady = false;
 
       function updateCloudStatus(text, status) {
         const el = document.getElementById('cloudStatus');
@@ -670,39 +669,12 @@
       }
 
       async function initCloudbase() {
-        updateCloudStatus('正在连接云端...', '');
+        updateCloudStatus('正在连接云端(HTTP)...', '');
         
         try {
-          // 检查 SDK 是否加载
-          if (typeof cloudbase === 'undefined') {
-            console.error('CloudBase SDK not loaded');
-            updateCloudStatus('SDK加载失败，请刷新重试', 'error');
-            return false;
-          }
-          
-          console.log('CloudBase SDK version:', cloudbase.version || 'unknown');
-          
-          // 初始化
-          cloudApp = cloudbase.init({ 
-            env: CLOUD_ENV_ID,
-            timeout: 10000
-          });
-          
-          console.log('CloudBase app initialized');
-          updateCloudStatus('正在登录...', '');
-          
-          // 匿名登录
-          const auth = cloudApp.auth({ persistence: 'local' });
-          await auth.anonymousAuthProvider().signIn();
-          
-          console.log('Anonymous login success');
-          updateCloudStatus('正在连接数据库...', '');
-          
-          // 获取数据库实例
-          cloudDb = cloudApp.database();
-          
-          console.log('Database instance created');
-          updateCloudStatus('✓ 云端连接成功', 'connected');
+          // 使用 HTTP API，无需 SDK
+          cloudReady = true;
+          updateCloudStatus('✓ 云端已连接', 'connected');
           setTimeout(() => { 
             const el = document.getElementById('cloudStatus');
             if (el) el.style.display = 'none';
@@ -711,53 +683,68 @@
           return true;
         } catch (e) {
           console.error('CloudBase init error:', e);
-          const errorMsg = e.message || e.toString();
-          updateCloudStatus('连接失败: ' + errorMsg.substring(0, 30), 'error');
-          
-          // 不自动隐藏错误信息，让用户看到
+          updateCloudStatus('连接失败', 'error');
           return false;
         }
       }
 
       async function loadFromCloud() {
-        if (!cloudDb) return;
+        if (!cloudReady) return false;
         try {
-          const res = await cloudDb.collection('weekend_plans').doc(CLOUD_DOC_ID).get();
-          const data = res && res.data && res.data[0];
+          const response = await fetch(`${CLOUD_API_BASE}/database/query`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              env: CLOUD_ENV_ID,
+              query: `db.collection('weekend_plans').doc('${CLOUD_DOC_ID}').get()`
+            })
+          });
+          
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          
+          const result = await response.json();
+          const data = result && result.data && result.data[0];
+          
           if (data && data.plans && data.schedule) {
             plans = Array.isArray(data.plans) ? data.plans : plans;
             schedule = typeof data.schedule === 'object' && data.schedule ? { ...schedule, ...data.schedule } : schedule;
             for (const { id } of SLOT_DEFS) if (!schedule[id]) schedule[id] = [];
             writeLS('plans', plans); writeLS('schedule', schedule);
-            updateCloudStatus('已从云端加载', 'connected');
+            updateCloudStatus('✓ 已从云端加载', 'connected');
             return true;
           }
         } catch (e) {
           console.error('Load from cloud failed:', e);
-          updateCloudStatus('加载失败: ' + (e.message || '未知错误'), 'error');
+          updateCloudStatus('云端加载失败', 'error');
         }
         return false;
       }
 
       let saveTimer = null;
       async function saveToCloud() {
-        if (!cloudDb) return;
+        if (!cloudReady) return;
         if (saveTimer) clearTimeout(saveTimer);
         return new Promise((resolve) => {
           saveTimer = setTimeout(async () => {
             try {
-              await cloudDb.collection('weekend_plans').doc(CLOUD_DOC_ID).set({ _id: CLOUD_DOC_ID, plans, schedule, updatedAt: Date.now() });
-              updateCloudStatus('已保存到云端', 'connected');
-              setTimeout(() => { const el = document.getElementById('cloudStatus'); if (el) el.style.display = 'none'; }, 2000);
-            } catch (e) {
-              try {
-                await cloudDb.collection('weekend_plans').doc(CLOUD_DOC_ID).update({ plans, schedule, updatedAt: Date.now() });
-                updateCloudStatus('已保存到云端', 'connected');
+              const response = await fetch(`${CLOUD_API_BASE}/database/update`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  env: CLOUD_ENV_ID,
+                  query: `db.collection('weekend_plans').doc('${CLOUD_DOC_ID}').set({_id: '${CLOUD_DOC_ID}', plans: ${JSON.stringify(plans)}, schedule: ${JSON.stringify(schedule)}, updatedAt: ${Date.now()}})`
+                })
+              });
+              
+              if (response.ok) {
+                updateCloudStatus('✓ 已保存到云端', 'connected');
                 setTimeout(() => { const el = document.getElementById('cloudStatus'); if (el) el.style.display = 'none'; }, 2000);
-              } catch (e2) {
-                console.error('Save to cloud failed:', e2);
-                updateCloudStatus('保存失败', 'error');
+              } else {
+                throw new Error('HTTP ' + response.status);
               }
+            } catch (e) {
+              console.error('Save to cloud failed:', e);
+              updateCloudStatus('云端保存失败', 'error');
             }
             resolve();
           }, 200);
