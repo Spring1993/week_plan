@@ -395,7 +395,7 @@
       <div>Made with <i class="fa-solid fa-heart" style="color:#ef4444"></i> for a better weekend. 数据保存在浏览器本地。</div>
   </footer>
 
-    <script src="https://imgcache.qq.com/qcloud/cloudbase-js-sdk/1.7.2/cloudbase.full.js"></script>
+    <script src="https://web-9gikcbug35bb7a8c-1304825656.tcloudbaseapp.com/cloudbase-js-sdk/1.7.2/cloudbase.full.js"></script>
     <script>
       // Data structures in localStorage
       // plans: { id, title, type, location, priority, notes }
@@ -671,6 +671,9 @@
       async function initCloudbase() {
         updateCloudStatus('连接中...', '');
         try {
+          if (typeof cloudbase === 'undefined') {
+            throw new Error('CloudBase SDK 加载失败，请检查网络');
+          }
           cloudApp = cloudbase.init({ env: CLOUD_ENV_ID });
           await cloudApp.auth({ persistence: 'local' }).anonymousAuthProvider().signIn();
           cloudDb = cloudApp.database();
@@ -679,7 +682,8 @@
           return true;
         } catch (e) {
           console.error('CloudBase init failed:', e);
-          updateCloudStatus('连接失败: ' + (e.message || '未知错误'), 'error');
+          updateCloudStatus('云端连接失败，仅本地模式', 'error');
+          setTimeout(() => { document.getElementById('cloudStatus').style.display = 'none'; }, 5000);
           return false;
         }
       }
