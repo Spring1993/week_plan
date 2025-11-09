@@ -1,0 +1,20 @@
+{
+  "plans": [],
+  "schedule": {
+    "fri_pm": [],
+    "sat_am": [],
+    "sat_pm": [],
+    "sat_nt": [],
+    "sun_am": [],
+    "sun_pm": [],
+    "sun_nt": [],
+    "any": [],
+    "fri_dinner": [],
+    "sat_lunch": [],
+    "sat_dinner": [],
+    "sun_lunch": [],
+    "sun_dinner": []
+  },
+  "updatedAt": 0
+}
+

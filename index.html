@@ -658,9 +658,9 @@
         writeLS('plans', plans);
       }
 
-      // JSONBin.io 云端存储（支持 CORS）
-      const JSONBIN_BIN_ID = '673eb8c8acd3cb34a8af6e1a'; // 公共 bin ID
-      const JSONBIN_API = 'https://api.jsonbin.io/v3';
+      // GitHub 仓库存储（使用 data.json 文件）
+      const GITHUB_REPO = 'Spring1993/week_plan';
+      const DATA_FILE_URL = `https://raw.githubusercontent.com/${GITHUB_REPO}/main/data.json`;
       let cloudReady = false;
 
       function updateStatus(text, status) {
@@ -683,23 +683,23 @@
         try {
           updateStatus('正在从云端加载...', '');
           
-          const response = await fetch(`${JSONBIN_API}/b/${JSONBIN_BIN_ID}/latest`, {
+          const response = await fetch(DATA_FILE_URL + '?t=' + Date.now(), {
             method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Accept': 'application/json' }
           });
           
           if (!response.ok) {
             if (response.status === 404) {
-              // Bin 不存在，正常情况
+              // 文件不存在，正常情况
               return false;
             }
             throw new Error('HTTP ' + response.status);
           }
           
-          const result = await response.json();
-          if (result.record) {
-            plans = result.record.plans || [];
-            schedule = result.record.schedule || {};
+          const data = await response.json();
+          if (data.plans && data.schedule) {
+            plans = data.plans || [];
+            schedule = data.schedule || {};
             for (const { id } of SLOT_DEFS) if (!schedule[id]) schedule[id] = [];
             writeLS('plans', plans);
             writeLS('schedule', schedule);
@@ -708,36 +708,18 @@
           }
         } catch (e) {
           console.error('Load failed:', e);
-          updateStatus('云端加载失败', 'error');
+          // 404 不显示错误
+          if (!e.message.includes('404')) {
+            updateStatus('云端加载失败', 'error');
+          }
         }
         return false;
       }
 
-      let saveTimer = null;
+      // 保存功能：提示用户点击"分享"按钮
       async function saveToCloud() {
-        if (saveTimer) clearTimeout(saveTimer);
-        
-        saveTimer = setTimeout(async () => {
-          try {
-            updateStatus('正在保存到云端...', '');
-            
-            const response = await fetch(`${JSONBIN_API}/b/${JSONBIN_BIN_ID}`, {
-              method: 'PUT',
-              headers: { 
-                'Content-Type': 'application/json',
-                'X-Master-Key': '$2a$10$8vZ9K5xYxYxYxYxYxYxYxOeK5K5K5K5K5K5K5K5K5K5K5K5K5K5'
-              },
-              body: JSON.stringify({ plans, schedule, updatedAt: Date.now() })
-            });
-            
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            
-            updateStatus('✓ 已保存到云端', 'connected');
-          } catch (e) {
-            console.error('Save failed:', e);
-            updateStatus('保存失败: ' + e.message, 'error');
-          }
-        }, 500);
+        // 不自动保存到 GitHub，避免复杂性
+        // 用户可以通过"分享"功能生成链接
       }
 
       // 分享按钮
