@@ -654,11 +654,11 @@
         writeLS('plans', plans);
       }
 
-      // CloudBase HTTP API (无需SDK)
+      // CloudBase 云函数 HTTP 接口
       const CLOUD_ENV_ID = 'cloud1-6gbv0ehtde10ce4f';
       const CLOUD_DOC_ID = 'public';
-      const CLOUD_API_BASE = `https://${CLOUD_ENV_ID}.service.tcloudbase.com`;
-      let cloudApp, cloudDb, cloudReady = false;
+      const CLOUD_FUNCTION_URL = 'https://cloud1-6gbv0ehtde10ce4f-1385252943.ap-shanghai.service.tcloudbase.com/weekend-sync';
+      let cloudReady = false;
 
       function updateCloudStatus(text, status) {
         const el = document.getElementById('cloudStatus');
@@ -669,10 +669,18 @@
       }
 
       async function initCloudbase() {
-        updateCloudStatus('正在连接云端(HTTP)...', '');
+        updateCloudStatus('正在连接云端...', '');
         
         try {
-          // 使用 HTTP API，无需 SDK
+          // 测试云函数连接
+          const response = await fetch(CLOUD_FUNCTION_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get' })
+          });
+          
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          
           cloudReady = true;
           updateCloudStatus('✓ 云端已连接', 'connected');
           setTimeout(() => { 
@@ -683,7 +691,7 @@
           return true;
         } catch (e) {
           console.error('CloudBase init error:', e);
-          updateCloudStatus('连接失败', 'error');
+          updateCloudStatus('连接失败: ' + e.message, 'error');
           return false;
         }
       }
@@ -691,31 +699,30 @@
       async function loadFromCloud() {
         if (!cloudReady) return false;
         try {
-          const response = await fetch(`${CLOUD_API_BASE}/database/query`, {
+          const response = await fetch(CLOUD_FUNCTION_URL, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              env: CLOUD_ENV_ID,
-              query: `db.collection('weekend_plans').doc('${CLOUD_DOC_ID}').get()`
-            })
+            body: JSON.stringify({ action: 'get' })
           });
           
           if (!response.ok) throw new Error('HTTP ' + response.status);
           
           const result = await response.json();
-          const data = result && result.data && result.data[0];
           
-          if (data && data.plans && data.schedule) {
-            plans = Array.isArray(data.plans) ? data.plans : plans;
-            schedule = typeof data.schedule === 'object' && data.schedule ? { ...schedule, ...data.schedule } : schedule;
-            for (const { id } of SLOT_DEFS) if (!schedule[id]) schedule[id] = [];
-            writeLS('plans', plans); writeLS('schedule', schedule);
-            updateCloudStatus('✓ 已从云端加载', 'connected');
-            return true;
+          if (result.success && result.data && result.data.length > 0) {
+            const cloudData = result.data[0];
+            if (cloudData.plans && cloudData.schedule) {
+              plans = Array.isArray(cloudData.plans) ? cloudData.plans : plans;
+              schedule = typeof cloudData.schedule === 'object' ? { ...schedule, ...cloudData.schedule } : schedule;
+              for (const { id } of SLOT_DEFS) if (!schedule[id]) schedule[id] = [];
+              writeLS('plans', plans); writeLS('schedule', schedule);
+              updateCloudStatus('✓ 已从云端加载', 'connected');
+              return true;
+            }
           }
         } catch (e) {
           console.error('Load from cloud failed:', e);
-          updateCloudStatus('云端加载失败', 'error');
+          updateCloudStatus('加载失败: ' + e.message, 'error');
         }
         return false;
       }
@@ -727,24 +734,27 @@
         return new Promise((resolve) => {
           saveTimer = setTimeout(async () => {
             try {
-              const response = await fetch(`${CLOUD_API_BASE}/database/update`, {
+              const response = await fetch(CLOUD_FUNCTION_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                  env: CLOUD_ENV_ID,
-                  query: `db.collection('weekend_plans').doc('${CLOUD_DOC_ID}').set({_id: '${CLOUD_DOC_ID}', plans: ${JSON.stringify(plans)}, schedule: ${JSON.stringify(schedule)}, updatedAt: ${Date.now()}})`
+                  action: 'set',
+                  data: { plans, schedule }
                 })
               });
               
-              if (response.ok) {
+              if (!response.ok) throw new Error('HTTP ' + response.status);
+              
+              const result = await response.json();
+              if (result.success) {
                 updateCloudStatus('✓ 已保存到云端', 'connected');
                 setTimeout(() => { const el = document.getElementById('cloudStatus'); if (el) el.style.display = 'none'; }, 2000);
               } else {
-                throw new Error('HTTP ' + response.status);
+                throw new Error(result.error || '保存失败');
               }
             } catch (e) {
               console.error('Save to cloud failed:', e);
-              updateCloudStatus('云端保存失败', 'error');
+              updateCloudStatus('保存失败: ' + e.message, 'error');
             }
             resolve();
           }, 200);
