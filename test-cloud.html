@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CloudBase 连接测试</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #fff; }
+    .log { background: #2a2a2a; padding: 10px; margin: 5px 0; border-radius: 5px; }
+    .success { color: #4ade80; }
+    .error { color: #f87171; }
+    .info { color: #60a5fa; }
+  </style>
+</head>
+<body>
+  <h1>CloudBase 云端连接测试</h1>
+  <div id="logs"></div>
+  
+  <script src="https://unpkg.com/@cloudbase/js-sdk@1.7.2/dist/index.umd.js"></script>
+  <script>
+    const CLOUD_ENV_ID = 'cloud1-6gbv0ehtde10ce4f';
+    const logs = document.getElementById('logs');
+    
+    function log(msg, type = 'info') {
+      const div = document.createElement('div');
+      div.className = 'log ' + type;
+      div.textContent = new Date().toLocaleTimeString() + ' - ' + msg;
+      logs.appendChild(div);
+      console.log(msg);
+    }
+    
+    async function testConnection() {
+      try {
+        log('开始测试...', 'info');
+        
+        // 检查 SDK
+        if (typeof cloudbase === 'undefined') {
+          log('❌ CloudBase SDK 未加载', 'error');
+          return;
+        }
+        log('✓ CloudBase SDK 已加载', 'success');
+        
+        // 初始化
+        log('正在初始化...', 'info');
+        const app = cloudbase.init({ env: CLOUD_ENV_ID, timeout: 10000 });
+        log('✓ CloudBase 初始化成功', 'success');
+        
+        // 匿名登录
+        log('正在匿名登录...', 'info');
+        const auth = app.auth({ persistence: 'local' });
+        await auth.anonymousAuthProvider().signIn();
+        log('✓ 匿名登录成功', 'success');
+        
+        // 获取数据库
+        log('正在连接数据库...', 'info');
+        const db = app.database();
+        log('✓ 数据库实例创建成功', 'success');
+        
+        // 测试读取
+        log('正在测试读取数据...', 'info');
+        const res = await db.collection('weekend_plans').doc('public').get();
+        log('✓ 数据读取成功: ' + JSON.stringify(res.data), 'success');
+        
+        // 测试写入
+        log('正在测试写入数据...', 'info');
+        await db.collection('weekend_plans').doc('test').set({
+          _id: 'test',
+          message: 'Test from ' + new Date().toISOString(),
+          timestamp: Date.now()
+        });
+        log('✓ 数据写入成功', 'success');
+        
+        log('========== 所有测试通过 ==========', 'success');
+        
+      } catch (e) {
+        log('❌ 错误: ' + e.message, 'error');
+        log('详细信息: ' + JSON.stringify(e), 'error');
+      }
+    }
+    
+    // 等待 SDK 加载后执行
+    if (typeof cloudbase !== 'undefined') {
+      testConnection();
+    } else {
+      window.addEventListener('load', () => {
+        setTimeout(testConnection, 500);
+      });
+    }
+  </script>
+</body>
+</html>
+
