@@ -273,6 +273,10 @@
           <span>周末行动计划</span>
         </div>
         <div class="spacer"></div>
+        <button id="exportBtn" class="pill" title="导出数据">
+          <i class="fa-solid fa-download"></i>
+          <span>导出</span>
+        </button>
         <button id="shareBtn" class="pill" title="生成分享链接">
           <i class="fa-solid fa-share-nodes"></i>
           <span>分享</span>
@@ -721,6 +725,25 @@
         // 不自动保存到 GitHub，避免复杂性
         // 用户可以通过"分享"功能生成链接
       }
+
+      // 导出按钮
+      el('#exportBtn').addEventListener('click', () => {
+        const data = { plans, schedule, updatedAt: Date.now() };
+        const json = JSON.stringify(data, null, 2);
+        
+        // 下载为文件
+        const blob = new Blob([json], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'weekend_plans.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        
+        updateStatus('✓ 数据已导出', 'connected');
+      });
 
       // 分享按钮
       el('#shareBtn').addEventListener('click', () => {
