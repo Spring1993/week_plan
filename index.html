@@ -395,7 +395,40 @@
       <div>Made with <i class="fa-solid fa-heart" style="color:#ef4444"></i> for a better weekend. 数据保存在浏览器本地。</div>
   </footer>
 
-    <script src="https://web-9gikcbug35bb7a8c-1304825656.tcloudbaseapp.com/cloudbase-js-sdk/1.7.2/cloudbase.full.js"></script>
+    <script>
+      // 动态加载 CloudBase SDK，支持多个备用源
+      (function loadCloudbaseSDK() {
+        const cdnList = [
+          'https://static.cloudbase.net/cloudbase-js-sdk/1.7.2/cloudbase.full.js',
+          'https://web-9gikcbug35bb7a8c-1304825656.tcloudbaseapp.com/cloudbase-js-sdk/1.7.2/cloudbase.full.js',
+          'https://imgcache.qq.com/qcloud/cloudbase-js-sdk/1.7.2/cloudbase.full.js'
+        ];
+        let currentIndex = 0;
+        
+        function tryLoad() {
+          if (currentIndex >= cdnList.length) {
+            console.warn('All CloudBase CDN sources failed');
+            window.cloudbaseLoadFailed = true;
+            return;
+          }
+          
+          const script = document.createElement('script');
+          script.src = cdnList[currentIndex];
+          script.onload = () => {
+            console.log('CloudBase SDK loaded from:', cdnList[currentIndex]);
+            window.cloudbaseLoaded = true;
+          };
+          script.onerror = () => {
+            console.warn('Failed to load from:', cdnList[currentIndex]);
+            currentIndex++;
+            tryLoad();
+          };
+          document.head.appendChild(script);
+        }
+        
+        tryLoad();
+      })();
+    </script>
     <script>
       // Data structures in localStorage
       // plans: { id, title, type, location, priority, notes }
@@ -668,22 +701,44 @@
         el.querySelector('span').textContent = text;
       }
 
-      async function initCloudbase() {
-        updateCloudStatus('连接中...', '');
-        try {
-          if (typeof cloudbase === 'undefined') {
-            throw new Error('CloudBase SDK 加载失败，请检查网络');
+      async function waitForCloudbase(timeout = 5000) {
+        const start = Date.now();
+        while (Date.now() - start < timeout) {
+          if (window.cloudbaseLoaded && typeof cloudbase !== 'undefined') {
+            return true;
           }
+          if (window.cloudbaseLoadFailed) {
+            return false;
+          }
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        return false;
+      }
+
+      async function initCloudbase() {
+        updateCloudStatus('加载云端SDK...', '');
+        
+        // 等待 SDK 加载
+        const sdkLoaded = await waitForCloudbase();
+        if (!sdkLoaded || typeof cloudbase === 'undefined') {
+          console.warn('CloudBase SDK not available');
+          updateCloudStatus('云端不可用，使用本地模式', 'error');
+          setTimeout(() => { document.getElementById('cloudStatus').style.display = 'none'; }, 4000);
+          return false;
+        }
+        
+        updateCloudStatus('连接云端...', '');
+        try {
           cloudApp = cloudbase.init({ env: CLOUD_ENV_ID });
           await cloudApp.auth({ persistence: 'local' }).anonymousAuthProvider().signIn();
           cloudDb = cloudApp.database();
-          updateCloudStatus('云端已连接', 'connected');
+          updateCloudStatus('✓ 云端已连接', 'connected');
           setTimeout(() => { document.getElementById('cloudStatus').style.display = 'none'; }, 3000);
           return true;
         } catch (e) {
           console.error('CloudBase init failed:', e);
-          updateCloudStatus('云端连接失败，仅本地模式', 'error');
-          setTimeout(() => { document.getElementById('cloudStatus').style.display = 'none'; }, 5000);
+          updateCloudStatus('云端连接失败，使用本地模式', 'error');
+          setTimeout(() => { document.getElementById('cloudStatus').style.display = 'none'; }, 4000);
           return false;
         }
       }
