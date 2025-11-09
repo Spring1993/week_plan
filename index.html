@@ -243,6 +243,25 @@
       .timeline-table th { background: #0b1326; color: var(--muted); font-weight: 600; }
       .timeline-table tr:nth-child(even) td { background: #0b1322; }
 
+      /* Cloud status */
+      .cloud-status {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 8px 12px;
+        font-size: 12px;
+        color: var(--muted);
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .cloud-status.connected { color: var(--success); }
+      .cloud-status.error { color: var(--danger); }
+
       
     </style>
   </head>
@@ -255,6 +274,10 @@
         </div>
         <div class="spacer"></div>
       </nav>
+      <div id="cloudStatus" class="cloud-status" style="display:none;">
+        <i class="fa-solid fa-cloud"></i>
+        <span>连接中...</span>
+      </div>
       <div class="hero">
         <h1>规划你的理想周末</h1>
         <p>录入计划、拖拽分配时间段，轻松安排周五晚到周日晚的行程。</p>
@@ -637,13 +660,27 @@
       const CLOUD_DOC_ID = 'public';
       let cloudApp, cloudDb;
 
+      function updateCloudStatus(text, status) {
+        const el = document.getElementById('cloudStatus');
+        if (!el) return;
+        el.style.display = 'flex';
+        el.className = 'cloud-status ' + (status || '');
+        el.querySelector('span').textContent = text;
+      }
+
       async function initCloudbase() {
+        updateCloudStatus('连接中...', '');
         try {
           cloudApp = cloudbase.init({ env: CLOUD_ENV_ID });
           await cloudApp.auth({ persistence: 'local' }).anonymousAuthProvider().signIn();
           cloudDb = cloudApp.database();
+          updateCloudStatus('云端已连接', 'connected');
+          setTimeout(() => { document.getElementById('cloudStatus').style.display = 'none'; }, 3000);
+          return true;
         } catch (e) {
-          console.warn('CloudBase init failed:', e);
+          console.error('CloudBase init failed:', e);
+          updateCloudStatus('连接失败: ' + (e.message || '未知错误'), 'error');
+          return false;
         }
       }
 
@@ -652,13 +689,19 @@
         try {
           const res = await cloudDb.collection('weekend_plans').doc(CLOUD_DOC_ID).get();
           const data = res && res.data && res.data[0];
-          if (data) {
+          if (data && data.plans && data.schedule) {
             plans = Array.isArray(data.plans) ? data.plans : plans;
             schedule = typeof data.schedule === 'object' && data.schedule ? { ...schedule, ...data.schedule } : schedule;
             for (const { id } of SLOT_DEFS) if (!schedule[id]) schedule[id] = [];
             writeLS('plans', plans); writeLS('schedule', schedule);
+            updateCloudStatus('已从云端加载', 'connected');
+            return true;
           }
-        } catch (e) {}
+        } catch (e) {
+          console.error('Load from cloud failed:', e);
+          updateCloudStatus('加载失败: ' + (e.message || '未知错误'), 'error');
+        }
+        return false;
       }
 
       let saveTimer = null;
@@ -669,10 +712,17 @@
           saveTimer = setTimeout(async () => {
             try {
               await cloudDb.collection('weekend_plans').doc(CLOUD_DOC_ID).set({ _id: CLOUD_DOC_ID, plans, schedule, updatedAt: Date.now() });
+              updateCloudStatus('已保存到云端', 'connected');
+              setTimeout(() => { const el = document.getElementById('cloudStatus'); if (el) el.style.display = 'none'; }, 2000);
             } catch (e) {
               try {
                 await cloudDb.collection('weekend_plans').doc(CLOUD_DOC_ID).update({ plans, schedule, updatedAt: Date.now() });
-              } catch {}
+                updateCloudStatus('已保存到云端', 'connected');
+                setTimeout(() => { const el = document.getElementById('cloudStatus'); if (el) el.style.display = 'none'; }, 2000);
+              } catch (e2) {
+                console.error('Save to cloud failed:', e2);
+                updateCloudStatus('保存失败', 'error');
+              }
             }
             resolve();
           }, 200);
@@ -680,10 +730,27 @@
       }
 
       (async function bootstrap() {
-        await initCloudbase();
-        await loadFromCloud();
+        // 先渲染本地数据
         renderGrid();
         renderTimelineTable();
+        
+        // 初始化云端
+        const connected = await initCloudbase();
+        if (connected) {
+          const loaded = await loadFromCloud();
+          if (loaded) {
+            // 如果从云端加载了数据，重新渲染
+            renderGrid();
+            renderTimelineTable();
+          } else {
+            // 如果云端没有数据，但本地有数据，上传到云端
+            const localPlans = readLS('plans', []);
+            const localSchedule = readLS('schedule', {});
+            if (localPlans.length > 0 || Object.keys(localSchedule).some(k => localSchedule[k] && localSchedule[k].length > 0)) {
+              await saveToCloud();
+            }
+          }
+        }
       })();
     </script>
   </body>
