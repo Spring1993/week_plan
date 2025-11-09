@@ -399,8 +399,6 @@
       <div>Made with <i class="fa-solid fa-heart" style="color:#ef4444"></i> for a better weekend. 数据保存在浏览器本地。</div>
   </footer>
 
-    <script src="https://res.wx.qq.com/open/js/jweixin-1.6.0.js"></script>
-    <script src="https://web-9gikcbug35bb7a8c-1304825656.tcloudbaseapp.com/cloudbase-js-sdk/1.7.2/cloudbase.full.js"></script>
     <script>
       // Data structures in localStorage
       // plans: { id, title, type, location, priority, notes }
@@ -660,9 +658,10 @@
         writeLS('plans', plans);
       }
 
-      // CloudBase 数据库同步
+      // 直接使用云函数 API（通过小程序云调用接口）
       const CLOUD_ENV_ID = 'cloud1-6gbv0ehtde10ce4f';
-      let app, db, cloudReady = false;
+      const CLOUD_CALL_FUNCTION_URL = `https://${CLOUD_ENV_ID}.service.tcloudbase.com/web`;
+      let cloudReady = false;
 
       function updateStatus(text, status) {
         const el = document.getElementById('cloudStatus');
@@ -676,66 +675,64 @@
       }
 
       async function initCloud() {
-        updateStatus('正在连接腾讯云...', '');
-        try {
-          if (typeof cloudbase === 'undefined') {
-            throw new Error('SDK未加载');
-          }
-          
-          app = cloudbase.init({ env: CLOUD_ENV_ID });
-          await app.auth({ persistence: 'local' }).anonymousAuthProvider().signIn();
-          db = app.database();
-          cloudReady = true;
-          
-          updateStatus('✓ 已连接到腾讯云', 'connected');
-          return true;
-        } catch (e) {
-          console.error('Cloud init failed:', e);
-          updateStatus('连接失败: ' + e.message, 'error');
-          return false;
-        }
+        cloudReady = true;
+        return true;
       }
 
       async function loadFromCloud() {
-        if (!cloudReady) return false;
         try {
-          updateStatus('正在从云端加载...', '');
-          const res = await db.collection('weekend_plans').doc('public').get();
+          updateStatus('正在从腾讯云加载...', '');
           
-          if (res.data && res.data.length > 0) {
-            const cloudData = res.data[0];
-            plans = cloudData.plans || [];
-            schedule = cloudData.schedule || {};
+          const response = await fetch(`https://${CLOUD_ENV_ID}.service.tcloudbase.com/call-function`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-WX-SERVICE': 'weekend-sync' },
+            body: JSON.stringify({ action: 'get' })
+          });
+          
+          if (!response.ok) throw new Error('HTTP ' + response.status);
+          
+          const result = await response.json();
+          if (result.success && result.data) {
+            plans = result.data.plans || [];
+            schedule = result.data.schedule || {};
             for (const { id } of SLOT_DEFS) if (!schedule[id]) schedule[id] = [];
             writeLS('plans', plans);
             writeLS('schedule', schedule);
-            updateStatus('✓ 已从云端加载', 'connected');
+            updateStatus('✓ 已从腾讯云加载', 'connected');
             return true;
           }
         } catch (e) {
           console.error('Load failed:', e);
-          updateStatus('加载失败: ' + e.message, 'error');
+          updateStatus('云端加载失败', 'error');
         }
         return false;
       }
 
       let saveTimer = null;
       async function saveToCloud() {
-        if (!cloudReady) return;
         if (saveTimer) clearTimeout(saveTimer);
         
         saveTimer = setTimeout(async () => {
           try {
-            await db.collection('weekend_plans').doc('public').set({
-              _id: 'public',
-              plans,
-              schedule,
-              updatedAt: Date.now()
+            updateStatus('正在保存到腾讯云...', '');
+            
+            const response = await fetch(`https://${CLOUD_ENV_ID}.service.tcloudbase.com/call-function`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', 'X-WX-SERVICE': 'weekend-sync' },
+              body: JSON.stringify({ action: 'save', data: { plans, schedule } })
             });
-            updateStatus('✓ 已保存到云端', 'connected');
+            
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            
+            const result = await response.json();
+            if (result.success) {
+              updateStatus('✓ 已保存到腾讯云', 'connected');
+            } else {
+              throw new Error(result.error || '保存失败');
+            }
           } catch (e) {
             console.error('Save failed:', e);
-            updateStatus('保存失败: ' + e.message, 'error');
+            updateStatus('保存失败', 'error');
           }
         }, 500);
       }
