@@ -399,6 +399,8 @@
       <div>Made with <i class="fa-solid fa-heart" style="color:#ef4444"></i> for a better weekend. 数据保存在浏览器本地。</div>
   </footer>
 
+    <script src="https://res.wx.qq.com/open/js/jweixin-1.6.0.js"></script>
+    <script src="https://web-9gikcbug35bb7a8c-1304825656.tcloudbaseapp.com/cloudbase-js-sdk/1.7.2/cloudbase.full.js"></script>
     <script>
       // Data structures in localStorage
       // plans: { id, title, type, location, priority, notes }
@@ -514,6 +516,7 @@
             writeLS('schedule', schedule);
             renderGrid();
             renderTimelineTable();
+            saveToCloud();
           });
         });
       }
@@ -577,6 +580,7 @@
             for (const key of Object.keys(schedule)) schedule[key] = schedule[key].filter(pid => pid !== id);
             writeLS('plans', plans); writeLS('schedule', schedule);
             renderGrid(); renderTimelineTable();
+            saveToCloud();
           }));
           card.querySelectorAll('[data-action="unassign"]').forEach(btn => btn.addEventListener('click', () => {
             const inSlot = card.getAttribute('data-in-slot');
@@ -584,6 +588,7 @@
               schedule[inSlot] = schedule[inSlot].filter(pid => pid !== id);
               writeLS('schedule', schedule);
               renderGrid(); renderTimelineTable();
+              saveToCloud();
             }
           }));
         });
@@ -598,6 +603,7 @@
         for (const k of Object.keys(schedule)) schedule[k] = [];
         writeLS('schedule', schedule);
         renderGrid(); renderTimelineTable();
+        saveToCloud();
       });
 
       // Form submit
@@ -620,6 +626,7 @@
         writeLS('schedule', schedule);
         form.reset();
         renderGrid(); renderTimelineTable();
+        saveToCloud();
       });
 
       // 根据类型切换可选时间段
@@ -653,8 +660,9 @@
         writeLS('plans', plans);
       }
 
-      // URL 分享模式（无需云端）
-      let shareId = null;
+      // CloudBase 数据库同步
+      const CLOUD_ENV_ID = 'cloud1-6gbv0ehtde10ce4f';
+      let app, db, cloudReady = false;
 
       function updateStatus(text, status) {
         const el = document.getElementById('cloudStatus');
@@ -667,40 +675,76 @@
         }
       }
 
-      // URL 分享：生成带数据的链接
-      function generateShareLink() {
-        const data = { plans, schedule };
-        const compressed = btoa(encodeURIComponent(JSON.stringify(data)));
-        const url = window.location.origin + window.location.pathname + '#' + compressed;
-        return url;
+      async function initCloud() {
+        updateStatus('正在连接腾讯云...', '');
+        try {
+          if (typeof cloudbase === 'undefined') {
+            throw new Error('SDK未加载');
+          }
+          
+          app = cloudbase.init({ env: CLOUD_ENV_ID });
+          await app.auth({ persistence: 'local' }).anonymousAuthProvider().signIn();
+          db = app.database();
+          cloudReady = true;
+          
+          updateStatus('✓ 已连接到腾讯云', 'connected');
+          return true;
+        } catch (e) {
+          console.error('Cloud init failed:', e);
+          updateStatus('连接失败: ' + e.message, 'error');
+          return false;
+        }
       }
 
-      // 从 URL 加载数据
-      function loadFromURL() {
-        const hash = window.location.hash.slice(1);
-        if (!hash) return false;
-        
+      async function loadFromCloud() {
+        if (!cloudReady) return false;
         try {
-          const json = decodeURIComponent(atob(hash));
-          const data = JSON.parse(json);
-          if (data.plans && data.schedule) {
-            plans = data.plans;
-            schedule = data.schedule;
+          updateStatus('正在从云端加载...', '');
+          const res = await db.collection('weekend_plans').doc('public').get();
+          
+          if (res.data && res.data.length > 0) {
+            const cloudData = res.data[0];
+            plans = cloudData.plans || [];
+            schedule = cloudData.schedule || {};
             for (const { id } of SLOT_DEFS) if (!schedule[id]) schedule[id] = [];
             writeLS('plans', plans);
             writeLS('schedule', schedule);
-            shareId = hash;
+            updateStatus('✓ 已从云端加载', 'connected');
             return true;
           }
         } catch (e) {
-          console.error('Failed to load from URL:', e);
+          console.error('Load failed:', e);
+          updateStatus('加载失败: ' + e.message, 'error');
         }
         return false;
       }
 
+      let saveTimer = null;
+      async function saveToCloud() {
+        if (!cloudReady) return;
+        if (saveTimer) clearTimeout(saveTimer);
+        
+        saveTimer = setTimeout(async () => {
+          try {
+            await db.collection('weekend_plans').doc('public').set({
+              _id: 'public',
+              plans,
+              schedule,
+              updatedAt: Date.now()
+            });
+            updateStatus('✓ 已保存到云端', 'connected');
+          } catch (e) {
+            console.error('Save failed:', e);
+            updateStatus('保存失败: ' + e.message, 'error');
+          }
+        }, 500);
+      }
+
       // 分享按钮
       el('#shareBtn').addEventListener('click', () => {
-        const url = generateShareLink();
+        const data = { plans, schedule };
+        const compressed = btoa(encodeURIComponent(JSON.stringify(data)));
+        const url = window.location.origin + window.location.pathname + '?share=' + compressed;
         navigator.clipboard.writeText(url).then(() => {
           updateStatus('✓ 分享链接已复制', 'connected');
         }).catch(() => {
@@ -708,14 +752,41 @@
         });
       });
 
-      // 启动：从 URL 或本地加载
-      (function bootstrap() {
-        const fromURL = loadFromURL();
-        if (fromURL) {
-          updateStatus('✓ 已从分享链接加载', 'connected');
+      // 启动
+      (async function bootstrap() {
+        // 检查是否有分享链接
+        const urlParams = new URLSearchParams(window.location.search);
+        const shareData = urlParams.get('share');
+        if (shareData) {
+          try {
+            const json = decodeURIComponent(atob(shareData));
+            const data = JSON.parse(json);
+            plans = data.plans || [];
+            schedule = data.schedule || {};
+            for (const { id } of SLOT_DEFS) if (!schedule[id]) schedule[id] = [];
+            writeLS('plans', plans);
+            writeLS('schedule', schedule);
+            updateStatus('✓ 已从分享链接加载', 'connected');
+          } catch (e) {
+            console.error('Failed to load share:', e);
+          }
         }
+        
         renderGrid();
         renderTimelineTable();
+        
+        // 连接云端
+        const connected = await initCloud();
+        if (connected) {
+          const loaded = await loadFromCloud();
+          if (loaded) {
+            renderGrid();
+            renderTimelineTable();
+          } else if (plans.length > 0) {
+            // 本地有数据但云端没有，上传
+            await saveToCloud();
+          }
+        }
       })();
     </script>
   </body>

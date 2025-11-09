@@ -3,64 +3,44 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
 exports.main = async (event, context) => {
-  // 处理 CORS
-  if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type',
-      },
-      body: ''
-    };
-  }
-
+  const { action, data } = event;
+  
   try {
-    // 解析请求体
-    let body = event.body;
-    if (typeof body === 'string') {
-      body = JSON.parse(body);
-    }
-    
-    const { action, data } = body || event;
-    
-    let result;
     if (action === 'get') {
       // 读取数据
       const res = await db.collection('weekend_plans').doc('public').get();
-      result = { success: true, data: res.data };
-    } else if (action === 'set') {
+      if (res.data && res.data.length > 0) {
+        return { success: true, data: res.data[0] };
+      } else {
+        return { success: true, data: null };
+      }
+    } else if (action === 'save') {
       // 保存数据
-      await db.collection('weekend_plans').doc('public').set({
-        data: {
-          _id: 'public',
-          plans: data.plans,
-          schedule: data.schedule,
-          updatedAt: Date.now()
-        }
-      });
-      result = { success: true };
+      try {
+        await db.collection('weekend_plans').doc('public').set({
+          data: {
+            _id: 'public',
+            plans: data.plans,
+            schedule: data.schedule,
+            updatedAt: Date.now()
+          }
+        });
+      } catch (e) {
+        // 如果 set 失败，尝试 update
+        await db.collection('weekend_plans').doc('public').update({
+          data: {
+            plans: data.plans,
+            schedule: data.schedule,
+            updatedAt: Date.now()
+          }
+        });
+      }
+      return { success: true };
     } else {
-      result = { success: false, error: 'Invalid action' };
+      return { success: false, error: 'Invalid action' };
     }
-    
-    return {
-      statusCode: 200,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(result)
-    };
   } catch (e) {
-    return {
-      statusCode: 500,
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ success: false, error: e.message })
-    };
+    console.error('Function error:', e);
+    return { success: false, error: e.message };
   }
 };

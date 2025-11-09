@@ -1,0 +1,6 @@
+{
+  "envId": "",
+  "cloudrun": {
+    "name": "weekend-api"
+  }
+}
