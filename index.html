@@ -273,10 +273,14 @@
           <span>周末行动计划</span>
         </div>
         <div class="spacer"></div>
+        <button id="shareBtn" class="pill" title="生成分享链接">
+          <i class="fa-solid fa-share-nodes"></i>
+          <span>分享</span>
+        </button>
       </nav>
       <div id="cloudStatus" class="cloud-status" style="display:none;">
-        <i class="fa-solid fa-cloud"></i>
-        <span>连接中...</span>
+        <i class="fa-solid fa-link"></i>
+        <span>提示信息</span>
       </div>
       <div class="hero">
         <h1>规划你的理想周末</h1>
@@ -560,7 +564,6 @@
             writeLS('schedule', schedule);
             renderGrid();
             renderTimelineTable();
-            saveToCloud && saveToCloud().catch(() => {});
           });
         });
       }
@@ -574,7 +577,6 @@
             for (const key of Object.keys(schedule)) schedule[key] = schedule[key].filter(pid => pid !== id);
             writeLS('plans', plans); writeLS('schedule', schedule);
             renderGrid(); renderTimelineTable();
-            saveToCloud && saveToCloud().catch(() => {});
           }));
           card.querySelectorAll('[data-action="unassign"]').forEach(btn => btn.addEventListener('click', () => {
             const inSlot = card.getAttribute('data-in-slot');
@@ -582,7 +584,6 @@
               schedule[inSlot] = schedule[inSlot].filter(pid => pid !== id);
               writeLS('schedule', schedule);
               renderGrid(); renderTimelineTable();
-              saveToCloud && saveToCloud().catch(() => {});
             }
           }));
         });
@@ -597,7 +598,6 @@
         for (const k of Object.keys(schedule)) schedule[k] = [];
         writeLS('schedule', schedule);
         renderGrid(); renderTimelineTable();
-        saveToCloud && saveToCloud().catch(() => {});
       });
 
       // Form submit
@@ -620,7 +620,6 @@
         writeLS('schedule', schedule);
         form.reset();
         renderGrid(); renderTimelineTable();
-        saveToCloud && saveToCloud().catch(() => {});
       });
 
       // 根据类型切换可选时间段
@@ -654,135 +653,69 @@
         writeLS('plans', plans);
       }
 
-      // CloudBase 云函数 HTTP 接口
-      const CLOUD_ENV_ID = 'cloud1-6gbv0ehtde10ce4f';
-      const CLOUD_DOC_ID = 'public';
-      const CLOUD_FUNCTION_URL = 'https://cloud1-6gbv0ehtde10ce4f-1385252943.ap-shanghai.service.tcloudbase.com/weekend-sync';
-      let cloudReady = false;
+      // URL 分享模式（无需云端）
+      let shareId = null;
 
-      function updateCloudStatus(text, status) {
+      function updateStatus(text, status) {
         const el = document.getElementById('cloudStatus');
         if (!el) return;
         el.style.display = 'flex';
         el.className = 'cloud-status ' + (status || '');
         el.querySelector('span').textContent = text;
-      }
-
-      async function initCloudbase() {
-        updateCloudStatus('正在连接云端...', '');
-        
-        try {
-          // 测试云函数连接
-          const response = await fetch(CLOUD_FUNCTION_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get' })
-          });
-          
-          if (!response.ok) throw new Error('HTTP ' + response.status);
-          
-          cloudReady = true;
-          updateCloudStatus('✓ 云端已连接', 'connected');
-          setTimeout(() => { 
-            const el = document.getElementById('cloudStatus');
-            if (el) el.style.display = 'none';
-          }, 3000);
-          
-          return true;
-        } catch (e) {
-          console.error('CloudBase init error:', e);
-          updateCloudStatus('连接失败: ' + e.message, 'error');
-          return false;
+        if (status === 'connected') {
+          setTimeout(() => { el.style.display = 'none'; }, 3000);
         }
       }
 
-      async function loadFromCloud() {
-        if (!cloudReady) return false;
+      // URL 分享：生成带数据的链接
+      function generateShareLink() {
+        const data = { plans, schedule };
+        const compressed = btoa(encodeURIComponent(JSON.stringify(data)));
+        const url = window.location.origin + window.location.pathname + '#' + compressed;
+        return url;
+      }
+
+      // 从 URL 加载数据
+      function loadFromURL() {
+        const hash = window.location.hash.slice(1);
+        if (!hash) return false;
+        
         try {
-          const response = await fetch(CLOUD_FUNCTION_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get' })
-          });
-          
-          if (!response.ok) throw new Error('HTTP ' + response.status);
-          
-          const result = await response.json();
-          
-          if (result.success && result.data && result.data.length > 0) {
-            const cloudData = result.data[0];
-            if (cloudData.plans && cloudData.schedule) {
-              plans = Array.isArray(cloudData.plans) ? cloudData.plans : plans;
-              schedule = typeof cloudData.schedule === 'object' ? { ...schedule, ...cloudData.schedule } : schedule;
-              for (const { id } of SLOT_DEFS) if (!schedule[id]) schedule[id] = [];
-              writeLS('plans', plans); writeLS('schedule', schedule);
-              updateCloudStatus('✓ 已从云端加载', 'connected');
-              return true;
-            }
+          const json = decodeURIComponent(atob(hash));
+          const data = JSON.parse(json);
+          if (data.plans && data.schedule) {
+            plans = data.plans;
+            schedule = data.schedule;
+            for (const { id } of SLOT_DEFS) if (!schedule[id]) schedule[id] = [];
+            writeLS('plans', plans);
+            writeLS('schedule', schedule);
+            shareId = hash;
+            return true;
           }
         } catch (e) {
-          console.error('Load from cloud failed:', e);
-          updateCloudStatus('加载失败: ' + e.message, 'error');
+          console.error('Failed to load from URL:', e);
         }
         return false;
       }
 
-      let saveTimer = null;
-      async function saveToCloud() {
-        if (!cloudReady) return;
-        if (saveTimer) clearTimeout(saveTimer);
-        return new Promise((resolve) => {
-          saveTimer = setTimeout(async () => {
-            try {
-              const response = await fetch(CLOUD_FUNCTION_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  action: 'set',
-                  data: { plans, schedule }
-                })
-              });
-              
-              if (!response.ok) throw new Error('HTTP ' + response.status);
-              
-              const result = await response.json();
-              if (result.success) {
-                updateCloudStatus('✓ 已保存到云端', 'connected');
-                setTimeout(() => { const el = document.getElementById('cloudStatus'); if (el) el.style.display = 'none'; }, 2000);
-              } else {
-                throw new Error(result.error || '保存失败');
-              }
-            } catch (e) {
-              console.error('Save to cloud failed:', e);
-              updateCloudStatus('保存失败: ' + e.message, 'error');
-            }
-            resolve();
-          }, 200);
+      // 分享按钮
+      el('#shareBtn').addEventListener('click', () => {
+        const url = generateShareLink();
+        navigator.clipboard.writeText(url).then(() => {
+          updateStatus('✓ 分享链接已复制', 'connected');
+        }).catch(() => {
+          prompt('分享链接（复制后发给别人）：', url);
         });
-      }
+      });
 
-      (async function bootstrap() {
-        // 先渲染本地数据
+      // 启动：从 URL 或本地加载
+      (function bootstrap() {
+        const fromURL = loadFromURL();
+        if (fromURL) {
+          updateStatus('✓ 已从分享链接加载', 'connected');
+        }
         renderGrid();
         renderTimelineTable();
-        
-        // 初始化云端
-        const connected = await initCloudbase();
-        if (connected) {
-          const loaded = await loadFromCloud();
-          if (loaded) {
-            // 如果从云端加载了数据，重新渲染
-            renderGrid();
-            renderTimelineTable();
-          } else {
-            // 如果云端没有数据，但本地有数据，上传到云端
-            const localPlans = readLS('plans', []);
-            const localSchedule = readLS('schedule', {});
-            if (localPlans.length > 0 || Object.keys(localSchedule).some(k => localSchedule[k] && localSchedule[k].length > 0)) {
-              await saveToCloud();
-            }
-          }
-        }
       })();
     </script>
   </body>
