@@ -3,13 +3,33 @@ cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 const db = cloud.database();
 
 exports.main = async (event, context) => {
-  const { action, data } = event;
-  
+  // 处理 CORS
+  if (event.httpMethod === 'OPTIONS') {
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+      body: ''
+    };
+  }
+
   try {
+    // 解析请求体
+    let body = event.body;
+    if (typeof body === 'string') {
+      body = JSON.parse(body);
+    }
+    
+    const { action, data } = body || event;
+    
+    let result;
     if (action === 'get') {
       // 读取数据
       const res = await db.collection('weekend_plans').doc('public').get();
-      return { success: true, data: res.data };
+      result = { success: true, data: res.data };
     } else if (action === 'set') {
       // 保存数据
       await db.collection('weekend_plans').doc('public').set({
@@ -20,9 +40,27 @@ exports.main = async (event, context) => {
           updatedAt: Date.now()
         }
       });
-      return { success: true };
+      result = { success: true };
+    } else {
+      result = { success: false, error: 'Invalid action' };
     }
+    
+    return {
+      statusCode: 200,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(result)
+    };
   } catch (e) {
-    return { success: false, error: e.message };
+    return {
+      statusCode: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ success: false, error: e.message })
+    };
   }
 };
