@@ -759,7 +759,9 @@
 
       // 启动
       (async function bootstrap() {
-        // 检查是否有分享链接
+        // 优先级：分享链接 > 本地存储 > 云端文件
+        
+        // 1. 检查是否有分享链接
         const urlParams = new URLSearchParams(window.location.search);
         const shareData = urlParams.get('share');
         if (shareData) {
@@ -772,24 +774,27 @@
             writeLS('plans', plans);
             writeLS('schedule', schedule);
             updateStatus('✓ 已从分享链接加载', 'connected');
+            renderGrid();
+            renderTimelineTable();
+            return;
           } catch (e) {
             console.error('Failed to load share:', e);
           }
         }
         
+        // 2. 使用本地存储的数据（已在顶部加载）
         renderGrid();
         renderTimelineTable();
         
-        // 连接云端
-        const connected = await initCloud();
-        if (connected) {
-          const loaded = await loadFromCloud();
-          if (loaded) {
-            renderGrid();
-            renderTimelineTable();
-          } else if (plans.length > 0) {
-            // 本地有数据但云端没有，上传
-            await saveToCloud();
+        // 3. 仅在本地完全为空时，才尝试从云端加载
+        if (plans.length === 0) {
+          const connected = await initCloud();
+          if (connected) {
+            const loaded = await loadFromCloud();
+            if (loaded) {
+              renderGrid();
+              renderTimelineTable();
+            }
           }
         }
       })();
